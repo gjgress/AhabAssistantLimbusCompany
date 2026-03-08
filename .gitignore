@@ -12,6 +12,7 @@ dist
 dist_release
 *.pyc
 *.pyd
+*.egg-info
 
 # 运行时生成的文件
 *.dll

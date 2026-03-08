@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "ahab-assistant-limbus-company"
 description = "Ahab Assistant for Limbus Company: automation helper (GUI, OCR, tasks)."
@@ -11,8 +15,8 @@ version = "1.0.9"
 dependencies = [
     "pyside6>=6.9.2",
     "pyside6-fluent-widgets>=1.9.1",
-    "pyuac~=0.0.3",
-    "pywin32",
+    "pyuac~=0.0.3; sys_platform == 'win32'",
+    "pywin32; sys_platform == 'win32'",
     "PyAutoGUI",
     "pynput",
     "pyperclip",
@@ -33,7 +37,11 @@ dependencies = [
     "rapidocr>=3.4.1",
     "tzdata>=2025.2",
     "adbutils>=2.10.2",
-    "windows-toasts>=1.3.1",
+    "windows-toasts>=1.3.1; sys_platform == 'win32'",
+    # Linux-specific dependencies
+    "python-xlib>=0.33; sys_platform == 'linux'",
+    "mss>=9.0.0; sys_platform == 'linux'",
+    "ewmh>=0.1.6; sys_platform == 'linux'",
 ]
 
 [dependency-groups]
@@ -47,6 +55,41 @@ dev = [
 Homepage = "https://github.com/KIYI671/AhabAssistantLimbusCompany"
 Source = "https://github.com/KIYI671/AhabAssistantLimbusCompany"
 Issues = "https://github.com/KIYI671/AhabAssistantLimbusCompany/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*", "module*"]
+
+[tool.aalc.build.windows]
+main_spec = "main.spec"
+updater_spec = "updater.spec"
+main_bundle_dir = "AALC"
+updater_name = "AALC Updater.exe"
+archive_format = "7z"
+archive_level = "-mx=7"
+archive_glob = "AALC/*"
+
+[tool.aalc.build.windows.prune]
+paths = [
+    "PySide6/translations",
+    "PySide6/Qt6Qml.dll",
+    "PySide6/Qt6Quick.dll",
+    "PySide6/Qt6QmlModels.dll",
+    "PySide6/Qt6QmlWorkerScript.dll",
+    "PySide6/Qt6QmlMeta.dll",
+    "PySide6/Qt6OpenGL.dll",
+    "PySide6/opengl32sw.dll",
+    "PySide6/Qt6Pdf.dll",
+    "PySide6/Qt6Network.dll",
+    "PySide6/QtNetwork.pyd",
+    "rapidocr/models/ch_PP-OCRv5_rec_mobile_infer.onnx",
+    "rapidocr/models/ch_PP-OCRv5_mobile_det.onnx",
+    "cv2/opencv_videoio_ffmpeg4110_64.dll",
+]
+
+[tool.aalc.build.linux]
+backend = "pep517"
+formats = ["wheel", "sdist"]
 
 [tool.uv]
 managed = true

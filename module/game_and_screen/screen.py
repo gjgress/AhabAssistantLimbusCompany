@@ -1,3 +1,4 @@
+import sys
 from time import sleep
 from typing import TYPE_CHECKING, overload
 
@@ -19,10 +20,38 @@ class Handle:
 
     _hwnd: int = 0
     _transparent = False
+    _platform_window = None  # Platform window service (Linux only)
+    _platform_services = None  # Cached platform services
+
+    def _get_platform_services(self):
+        """Lazy initialization of platform services."""
+        if self._platform_services is None and sys.platform == "linux":
+            try:
+                from module.platform import get_platform_services
+
+                self._platform_services = get_platform_services()
+            except Exception as e:
+                log.error(f"Failed to initialize platform services: {e}")
+        return self._platform_services
 
     def init_handle(self, title: str = "LimbusCompany", class_name: str = "UnityWndClass") -> int:
         """获取窗口句柄"""
-        self._hwnd = win32gui.FindWindow(class_name, title)
+        if sys.platform == "win32":
+            self._hwnd = win32gui.FindWindow(class_name, title)
+        elif sys.platform == "linux":
+            services = self._get_platform_services()
+            if services:
+                result = services.window.find_game_window()
+                if result.success:
+                    self._hwnd = result.data.window_id
+                    self._platform_window = result.data
+                else:
+                    log.warning(f"Could not find game window: {result.error}")
+                    self._hwnd = 0
+            else:
+                self._hwnd = 0
+        else:
+            self._hwnd = 0
         return self._hwnd
 
     @property
@@ -42,14 +71,23 @@ class Handle:
         """判断窗口是否最小化"""
         if self.hwnd == 0:
             return False
-        return bool(win32gui.IsIconic(self.hwnd))
+        if sys.platform == "win32":
+            return bool(win32gui.IsIconic(self.hwnd))
+        # Linux: Check window state via EWMH (not implemented yet)
+        return False
 
     @property
     def isActive(self) -> bool:
         """判断窗口是否为活动窗口"""
         if self.hwnd == 0:
             return False
-        return self.hwnd == win32gui.GetForegroundWindow()
+        if sys.platform == "win32":
+            return self.hwnd == win32gui.GetForegroundWindow()
+        elif sys.platform == "linux":
+            services = self._get_platform_services()
+            if services and self._platform_window:
+                return self._platform_window.is_active
+        return False
 
     def rect(self, client: bool = False) -> tuple[int, int, int, int]:
         """获取窗口位置和大小
@@ -61,11 +99,22 @@ class Handle:
         """
         if self.hwnd == 0:
             return (0, 0, 0, 0)
-        if client:
-            _, _, width, height = win32gui.GetClientRect(self.hwnd)
-            x, y = win32gui.ClientToScreen(self.hwnd, (0, 0))
-            return (x, y, x + width, y + height)
-        return win32gui.GetWindowRect(self.hwnd)
+
+        if sys.platform == "win32":
+            if client:
+                _, _, width, height = win32gui.GetClientRect(self.hwnd)
+                x, y = win32gui.ClientToScreen(self.hwnd, (0, 0))
+                return (x, y, x + width, y + height)
+            return win32gui.GetWindowRect(self.hwnd)
+        elif sys.platform == "linux":
+            services = self._get_platform_services()
+            if services:
+                result = services.window.get_window_geometry(self.hwnd)
+                if result.success:
+                    rect = result.data
+                    # Convert WindowRect to tuple format (left, top, right, bottom)
+                    return (rect.x, rect.y, rect.x + rect.width, rect.y + rect.height)
+        return (0, 0, 0, 0)
 
     def width(self, client: bool = False) -> int:
         """获取窗口宽度
