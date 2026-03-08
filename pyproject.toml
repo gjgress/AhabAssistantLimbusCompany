@@ -94,6 +94,10 @@ formats = ["wheel", "sdist"]
 [tool.uv]
 managed = true
 override-dependencies = ["opencv-python; python_version < '0'"]
+environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'win32' and platform_machine == 'AMD64'",
+]
 
 # used by `pyside6-project lupdate`
 [tool.pyside6-project]

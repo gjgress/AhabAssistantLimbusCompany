@@ -3,54 +3,71 @@ import socket
 import sys
 import threading
 
-# 解决 Windows DPI 缩放问题
-from ctypes import windll
-
-try:
-    # 1. 尝试 Win10 1703+ 的最强方案 (Per Monitor V2)
-    # -4 对应 DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
-    windll.user32.SetProcessDpiAwarenessContext(-4)
-except (AttributeError, OSError):
-    try:
-        # 2. 尝试 Win8.1+ 的方案 (Per Monitor)
-        # 2 对应 PROCESS_PER_MONITOR_DPI_AWARE
-        windll.shcore.SetProcessDpiAwareness(2)
-    except (AttributeError, OSError):
-        try:
-            # 3. 最后的兜底方案 (Win7/Vista)
-            windll.user32.SetProcessDPIAware()
-        except Exception:
-            pass
-
 from app.language_manager import LanguageManager
 from app.my_app import MainWindow
 from module.config import cfg
 
-# 将当前工作目录设置为程序所在的目录，确保无论从哪里执行，其工作目录都正确设置为程序本身的位置，避免路径错误。
-os.chdir(
-    os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
-)
-
-# 获取管理员权限
-import pyuac
-
-if not pyuac.isUserAdmin():
-    try:
-        pyuac.runAsAdmin(False)
-        sys.exit(0)
-    except Exception:
-        sys.exit(1)
-
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import QApplication
-
-QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
-QApplication.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)
 
 
 # 创建一个辅助类用于在主线程处理信号
 class ArgumentSignaler(QObject):
     arguments_received = Signal(list)
+
+
+def set_working_directory() -> None:
+    """Set cwd to the app directory for consistent relative paths."""
+    os.chdir(
+        os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
+    )
+
+
+def configure_process_dpi() -> None:
+    """Configure DPI awareness on Windows only."""
+    if sys.platform != "win32":
+        return
+
+    try:
+        from ctypes import windll
+    except ImportError:
+        return
+
+    try:
+        windll.user32.SetProcessDpiAwarenessContext(-4)
+    except (AttributeError, OSError):
+        try:
+            windll.shcore.SetProcessDpiAwareness(2)
+        except (AttributeError, OSError):
+            try:
+                windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+
+
+def ensure_privileges() -> int:
+    """Request elevation on Windows when needed.
+
+    Returns:
+        0 if startup should continue.
+        Non-zero if the process should exit immediately.
+    """
+    if sys.platform != "win32":
+        return 0
+
+    try:
+        import pyuac
+    except ImportError:
+        return 0
+
+    if pyuac.isUserAdmin():
+        return 0
+
+    try:
+        pyuac.runAsAdmin(False)
+        return 1
+    except Exception:
+        return 1
 
 
 def start_socket_server(port, signaler):
@@ -81,49 +98,54 @@ def send_args_to_existing_instance(port, args):
         return False
 
 
-if __name__ == "__main__":
-    # 定义一个唯一的端口号（建议选择 1024-65535 之间的随机数）
-    APP_PORT = 62333
+def main(argv: list[str] | None = None) -> int:
+    argv = argv or sys.argv
 
-    # 1. 尝试发送参数给已有实例
-    if send_args_to_existing_instance(APP_PORT, sys.argv[1:]):
-        sys.exit(0)
+    set_working_directory()
+    configure_process_dpi()
 
-    # 2. 如果发送失败，说明是第一个实例，开始初始化
-    if cfg.zoom_scale != 0:
-        os.environ["QT_SCALE_FACTOR"] = str(cfg.zoom_scale / 100)
+    exit_code = ensure_privileges()
+    if exit_code != 0:
+        return exit_code
+
+    QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_DontCreateNativeWidgetSiblings)
+
+    app_port = 62333
+
+    if send_args_to_existing_instance(app_port, argv[1:]):
+        return 0
+
+    zoom_scale = cfg.zoom_scale
+    if isinstance(zoom_scale, (int, float)) and zoom_scale != 0:
+        os.environ["QT_SCALE_FACTOR"] = str(zoom_scale / 100)
 
     lang_manager = LanguageManager()
     lang = lang_manager.init_language()
 
-    app = QApplication(sys.argv)
-    app.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)
+    app = QApplication(argv)
+    app.setAttribute(Qt.ApplicationAttribute.AA_DontCreateNativeWidgetSiblings)
 
-    # 创建主窗口
-    ui = MainWindow(sys.argv)
-
-    # 3. 设置参数监听信号
+    ui = MainWindow(argv)
     signaler = ArgumentSignaler()
 
     def handle_args(args):
-        # 处理新参数的逻辑
         args.insert(0, "aalc")
         ui.command_start(args)
         ui.showNormal()
         ui.activateWindow()
         ui.raise_()
-        # 如果需要，可以在这里调用 ui.open_file(args[0]) 等
 
     signaler.arguments_received.connect(handle_args)
 
-    # 4. 在后台启动 Socket 服务器（非阻塞主线程）
-    # 注意：这里需要捕获 bind 异常，防止极短时间内双击导致的竞争
     try:
-        threading.Thread(target=start_socket_server, args=(APP_PORT, signaler), daemon=True).start()
+        threading.Thread(target=start_socket_server, args=(app_port, signaler), daemon=True).start()
     except OSError:
-        # 如果走到这说明刚才的 bind 突然成功了但又瞬间失败，通常直接退出即可
-        sys.exit(1)
+        return 1
 
     QTimer.singleShot(50, lambda: lang_manager.set_language(lang))
+    return app.exec()
 
-    sys.exit(app.exec())
+
+if __name__ == "__main__":
+    raise SystemExit(main())

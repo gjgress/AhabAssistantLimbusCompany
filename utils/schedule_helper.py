@@ -6,10 +6,6 @@ import datetime
 import getpass
 import os
 import sys
-import winreg
-
-import win32com.client
-from pywintypes import com_error
 
 from module.logger import log
 
@@ -24,7 +20,7 @@ class ScheduleHelper:
         if os.name == "nt":
             self._impl = ScheduleHelper_Win32()
         else:
-            raise RuntimeError("未知平台")
+            raise RuntimeError("当前平台暂不支持计划任务")
 
     def register_daily_task(self, task_name: str, cmd_line: str, h: int, m: int):
         """
@@ -71,6 +67,8 @@ class ScheduleHelper_Win32:
     """
 
     def __init__(self):
+        import win32com.client
+
         self.scheduler = win32com.client.Dispatch("Schedule.Service")
         self.scheduler.Connect()
         self.root = self.scheduler.GetFolder("\\")
@@ -104,7 +102,7 @@ class ScheduleHelper_Win32:
             log.info(
                 f"创建每日任务成功，执行时间为每日{h if len(str(h)) > 1 else '0' + str(h)}:{m if len(str(m)) > 1 else '0' + str(m)}"
             )
-        except com_error as e:
+        except Exception as e:
             log.error(f"创建任务 {task_name} 失败")
             raise e
 
@@ -132,7 +130,7 @@ class ScheduleHelper_Win32:
 
         try:
             self.root.RegisterTaskDefinition(task_name, task_def, 6, None, None, 3)
-        except com_error as e:
+        except Exception as e:
             log.error(f"创建任务 {task_name} 失败")
             raise e
 
@@ -141,6 +139,8 @@ class ScheduleHelper_Win32:
             """
             删除自启动项
             """
+            import winreg
+
             key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
             try:
                 key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
@@ -156,6 +156,6 @@ class ScheduleHelper_Win32:
             if task_name == "AALC Autostart":
                 unregister_onstart_task_registry(self, task_name)
             self.root.DeleteTask(task_name, 0)
-        except com_error as e:
+        except Exception as e:
             log.warning(f"尝试删除不存在的任务 {task_name}")
             raise e

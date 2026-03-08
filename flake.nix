@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";
@@ -73,9 +73,8 @@
           workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./.; };
 
           python = pkgs.python313;
-          spec = {
-            app = [ ];
-          };
+
+          hacks = pkgs.callPackage pyproject-nix.build.hacks {};
 
           # Generate overlay
           overlay = workspace.mkPyprojectOverlay { sourcePreference = "wheel"; };
@@ -85,19 +84,98 @@
             #  use uv2nix_hammer_overrides.overrides_strict / overrides_strict_debug
             #  to use only overrides exactly matching your python package versions
 
-            _final: _prev: {
+            _final: _prev:
+            let
+              qt6_full = with pkgs.qt6; [
+                qtbase
+
+                # optional
+                qt3d
+                qtcharts
+                qtconnectivity
+                qtdatavis3d
+                qtdeclarative
+                qthttpserver
+                qtmultimedia
+                qtnetworkauth
+                qtquick3d
+                qtremoteobjects
+                qtscxml
+                qtsensors
+                qtspeech
+                qtsvg
+                qtwebchannel
+                qtwebsockets
+                qtwebview
+                qtpositioning
+                qtlocation
+                qtshadertools
+                qtserialport
+                qtserialbus
+                qtgraphs
+                qttools
+                qtvirtualkeyboard
+
+                qtwayland
+                qtwebengine
+                qt3d
+                qtscxml
+              ];
+              qt_linked = pkgs.symlinkJoin {
+                name = "qt_linked";
+                paths = qt6_full;
+              };
+            in
+            {
               # place additional overlays here.
-              #a_pkg = prev.a_pkg.overrideAttrs (old: nativeBuildInputs = old.nativeBuildInputs ++ [pkgs.someBuildTool] ++ (final.resolveBuildSystems { setuptools = [];});
+              pyside6-addons = _prev.pyside6-addons.overrideAttrs (old: {
+                dontWrapQtApps = true;
+                buildInputs = [
+                  qt_linked
+                  pkgs.speechd
+                  pkgs.pcsclite
+                ];
+                # Somehow `autopatchelf` does not find the `shiboken6` and `pyside-essentials` libraries.
+                preFixup = ''
+                  addAutoPatchelfSearchPath ${_final.shiboken6}/${_final.python.sitePackages}/shiboken6
+                  addAutoPatchelfSearchPath ${_final.pyside6-essentials}/${_final.python.sitePackages}/PySide6
+                '';
+              });
               pyside6-essentials = _prev.pyside6-essentials.overrideAttrs (old: {
+                dontWrapQtApps = true;
                 autoPatchelfIgnoreMissingDeps = (old.autoPatchelfIgnoreMissingDeps or [ ]) ++ [
+                  "libmysqlclient.so.21"
+                  "libmimerapi.so"
                   "libQt6VirtualKeyboardQml.so.6"
                 ];
+                buildInputs = [
+                  qt_linked
+                  pkgs.gtk3
+                  pkgs.libxkbcommon
+                  pkgs.postgresql.lib
+
+                  pkgs.unixODBC
+                ];
+                # Somehow `autopatchelf` does not find the `shiboken6` library.
+                preFixup = ''
+                  addAutoPatchelfSearchPath ${_final.shiboken6}/${_final.python.sitePackages}/shiboken6
+                '';
               });
+              evdev = _prev.evdev.overrideAttrs (old: {
+                patchPhase = ''
+                  substituteInPlace setup.py \
+                    --replace-fail /usr/include ${pkgs.linuxHeaders}/include
+                '';
+                buildInputs = [ pkgs.linuxHeaders ];
+              });
+              tkinter = hacks.nixpkgsPrebuilt {
+                from = python.pkgs.tkinter;
+              };
             }
           );
 
           # Construct package set
-          pythonSet = # Use base package set from pyproject.nix builders
+          pythonSet' = # Use base package set from pyproject.nix builders
             (pkgs.callPackage pyproject-nix.build.packages {
               inherit python;
             }).overrideScope
@@ -116,46 +194,35 @@
             # members = [ "hello-world" ];
           };
 
-          editablePythonSet = pythonSet.overrideScope editableOverlay;
+          editablePythonSet = pythonSet'.overrideScope editableOverlay;
 
           virtualenv =
-            (editablePythonSet.mkVirtualEnv "aalc-dev-env" workspace.deps.all).overrideAttrs
+            (editablePythonSet.mkVirtualEnv "aalc-dev-env" (workspace.deps.all // {
+              tkinter = [ ];
+            })).overrideAttrs
               (old: {
                 venvIgnoreCollisions = [ "*" ];
               });
+
+          pythonSet = pythonSet'.pythonPkgsHostHost.overrideScope pyprojectOverrides;
         in
         {
           devShells.default = pkgs.mkShell {
-            packages = [
+            nativeBuildInputs = [ pkgs.uv ];
+            buildInputs = [
               virtualenv
-              pkgs.uv
             ]
             ++ lib.optionals (pkgs.stdenv.isLinux) [
               pkgs.xdotool
-              pkgs.grim
               pkgs.xorg.libX11
               pkgs.xorg.libXrandr
               pkgs.xorg.libXinerama
-            ];
-
-            nativeBuildInputs = lib.optionals (pkgs.stdenv.isLinux) [
-              pkgs.linuxHeaders
             ];
 
             env = {
               UV_NO_SYNC = "1";
               UV_PYTHON = editablePythonSet.python.interpreter;
               UV_PYTHON_DOWNLOADS = "never";
-            }
-            // lib.optionalAttrs (pkgs.stdenv.isLinux) {
-              # Point evdev build to Linux headers
-              C_INCLUDE_PATH = "${pkgs.linuxHeaders}/include";
-              # X11 libraries for mss and python-xlib
-              LD_LIBRARY_PATH = lib.makeLibraryPath [
-                pkgs.xorg.libX11
-                pkgs.xorg.libXrandr
-                pkgs.xorg.libXinerama
-              ];
             };
 
             shellHook = ''
@@ -164,6 +231,12 @@
             '';
           };
 
+          packages.default = (pythonSet.mkVirtualEnv "example-venv" (workspace.deps.default // {
+            tkinter = [ ];
+            ahab-assistant-limbus-company = [ ];
+          })).overrideAttrs (old: {
+            venvIgnoreCollisions = [ "*" ];
+          });
         };
     };
 }

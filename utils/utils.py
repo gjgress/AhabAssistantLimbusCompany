@@ -8,7 +8,11 @@ from zoneinfo import ZoneInfo  # Python 3.9+ 内置模块
 
 import cv2
 import numpy as np
-import win32crypt
+
+if os.name == "nt":
+    import win32crypt
+else:
+    win32crypt = None
 
 from module.config import cfg
 from module.logger import log
@@ -170,6 +174,9 @@ def encrypt_string(text: str, entropy: bytes = b"AALC") -> str:
     if not text:
         return ""
 
+    if win32crypt is None:
+        return text
+
     # 转换为字节
     data = text.encode("utf-8")
 
@@ -190,6 +197,9 @@ def decrypt_string(encrypted_b64: str, entropy: bytes = b"AALC") -> str:
     """使用当前Windows用户凭据解密字符串"""
     if not encrypted_b64:
         return ""
+
+    if win32crypt is None:
+        return encrypted_b64
 
     if len(encrypted_b64) % 4 != 0:
         return encrypted_b64
