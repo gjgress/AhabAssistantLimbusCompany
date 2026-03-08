@@ -73,6 +73,7 @@
           workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./.; };
 
           python = pkgs.python313;
+          pyproject = lib.importTOML ./pyproject.toml;
 
           hacks = pkgs.callPackage pyproject-nix.build.hacks {};
 
@@ -193,10 +194,16 @@
             # Optional: Only enable editable for these packages
             # members = [ "hello-world" ];
           };
-
-          editablePythonSet = pythonSet'.overrideScope editableOverlay;
-
-          virtualenv =
+          editablePythonSet = pythonSet'.overrideScope (
+            lib.composeExtensions editableOverlay (_final: prev: {
+              ahab-assistant-limbus-company = prev.ahab-assistant-limbus-company.overrideAttrs (old: {
+                nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
+                  _final.editables
+                ];
+              });
+            })
+          );
+          virtualenv-dev =
             (editablePythonSet.mkVirtualEnv "aalc-dev-env" (workspace.deps.all // {
               tkinter = [ ];
             })).overrideAttrs
@@ -205,18 +212,18 @@
               });
 
           pythonSet = pythonSet'.pythonPkgsHostHost.overrideScope pyprojectOverrides;
+          virtualenv = (pythonSet.mkVirtualEnv "example-venv" (workspace.deps.default // {
+            tkinter = [ ]; # Must include _tkinter for Python GUI
+          })).overrideAttrs (old: {
+            venvIgnoreCollisions = [ "*" ];
+          });
+
         in
         {
           devShells.default = pkgs.mkShell {
             nativeBuildInputs = [ pkgs.uv ];
             buildInputs = [
-              virtualenv
-            ]
-            ++ lib.optionals (pkgs.stdenv.isLinux) [
-              pkgs.xdotool
-              pkgs.xorg.libX11
-              pkgs.xorg.libXrandr
-              pkgs.xorg.libXinerama
+              virtualenv-dev
             ];
 
             env = {
@@ -231,12 +238,36 @@
             '';
           };
 
-          packages.default = (pythonSet.mkVirtualEnv "example-venv" (workspace.deps.default // {
-            tkinter = [ ];
-            ahab-assistant-limbus-company = [ ];
-          })).overrideAttrs (old: {
-            venvIgnoreCollisions = [ "*" ];
-          });
+          packages.default =
+            let
+              inherit (pkgs) stdenvNoCC makeWrapper;
+            in
+            stdenvNoCC.mkDerivation {
+              pname = "aalc";
+              version = pyproject.project.version;
+
+              dontUnpack = true;
+
+              nativeBuildInputs = [ makeWrapper ];
+
+              installPhase = ''
+                runHook preInstall
+
+                mkdir -p $out/bin
+                makeWrapper ${virtualenv}/bin/aalc $out/bin/aalc \
+                  --run 'export CONFIG_PATH="''${CONFIG_PATH:-$HOME/.config/aalc/config.yaml}"'
+
+                runHook postInstall
+              '';
+
+              meta = {
+                inherit (pyproject.project) description;
+                license = lib.licenses.agpl3Plus;
+                sourceProvenance = with lib.sourceTypes; [ fromSource ];
+                maintainers = with lib.maintainers; [ definfo ];
+                mainProgram = "aalc";
+              };
+            };
         };
     };
 }

@@ -9,6 +9,9 @@ from module import (
 )
 from module.config.config import Config, Theme_pack_list
 
+if os.getenv('CONFIG_PATH') is not None:
+    CONFIG_PATH = os.environ['CONFIG_PATH']
+
 cfg = Config(VERSION_PATH, EXAMPLE_PATH, CONFIG_PATH)
 
 # 复制当前环境变量，以便在不修改原始环境变量的情况下进行后续操作

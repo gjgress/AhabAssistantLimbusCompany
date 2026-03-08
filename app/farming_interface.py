@@ -26,7 +26,6 @@ from app.team_setting_card import TeamSettingCard
 from module.automation import auto
 from module.game_and_screen import screen
 from module.logger import log, ui_log_dispatcher
-from tasks.base.script_task_scheme import my_script_task
 from utils.utils import check_hard_mirror_time
 
 
@@ -410,6 +409,8 @@ class FarmingInterfaceLeft(QWidget):
 
     def create_and_start_script(self):
         try:
+            from tasks.base.script_task_scheme import my_script_task
+
             msg = "开始进行所有任务"
             log.info(msg)
             ui_log_dispatcher.clear()
