@@ -1,10 +1,15 @@
 import os
 import platform
+import sys
 import time
 from time import sleep
 
 import psutil
-import win32process
+
+if sys.platform == "win32":
+    import win32process
+else:
+    win32process = None
 
 from module.automation import auto
 from module.config import cfg
@@ -28,11 +33,44 @@ def kill_game():
 
             SimulatorControl.connection_device.close_current_app()
         return
-    if platform.system() == "Windows":
-        from module.game_and_screen import screen
 
-        _, pid = win32process.GetWindowThreadProcessId(screen.handle.hwnd)
-        os.system(f"taskkill /F /PID {pid}")
+    # Cross-platform process termination using psutil
+    from module.game_and_screen import screen
+
+    try:
+        # Find and kill the game process
+        if sys.platform == "win32":
+            # Windows: Get PID from window handle
+            _, pid = win32process.GetWindowThreadProcessId(screen.handle.hwnd)
+        else:
+            # Linux: Use psutil to find process by name
+            pid = None
+            for proc in psutil.process_iter(["pid", "name"]):
+                try:
+                    if cfg.game_process_name.lower() in proc.info["name"].lower():
+                        pid = proc.info["pid"]
+                        break
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            if pid is None:
+                log.error(f"未找到游戏进程: {cfg.game_process_name}")
+                return
+
+        # Kill the process
+        try:
+            process = psutil.Process(pid)
+            process.terminate()
+            process.wait(timeout=10)
+        except psutil.NoSuchProcess:
+            log.debug("游戏进程已不存在")
+        except psutil.TimeoutExpired:
+            log.warning("进程未在超时内终止，强制杀死")
+            process.kill()
+
+    except Exception as e:
+        log.error(f"关闭游戏时出错: {e}")
+
     sleep(10)
     while True:
         kill = False
@@ -41,13 +79,13 @@ def kill_game():
                 # 获取进程的可执行文件名（如 "notepad.exe"）
                 proc_name = proc.info["name"]
                 # 精确匹配进程名（区分大小写，取决于系统）
-                if cfg.game_process_name not in proc_name:
+                if cfg.game_process_name.lower() in proc_name.lower():
                     kill = True
                     break
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 # 忽略已终止、无权限或僵尸进程
                 continue
-        if kill:
+        if not kill:
             break
 
 

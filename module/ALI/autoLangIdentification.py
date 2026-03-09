@@ -1,10 +1,16 @@
 import json
-import winreg
+import sys
 from pathlib import Path
 
 import psutil
-import win32process
 from PySide6.QtCore import QT_TRANSLATE_NOOP
+
+if sys.platform == "win32":
+    import winreg
+    import win32process
+else:
+    winreg = None
+    win32process = None
 
 from app.language_manager import SUPPORTED_GAME_LANG_CODE
 
@@ -23,6 +29,25 @@ class AutoSwitchCon:
     "语言切换失败, 可能是不支持的语言"
 
 
+def _get_linux_game_path() -> Path | None:
+    """Get game path on Linux by reading Steam config file directly."""
+    try:
+        # Try to find the game config in common Steam locations
+        steam_paths = [
+            Path.home() / ".local/share/Steam/steamapps/common/Limbus Company",
+            Path.home() / ".steam/steam/steamapps/common/Limbus Company",
+        ]
+
+        for steam_path in steam_paths:
+            if steam_path.exists():
+                return steam_path
+
+        return None
+    except Exception as e:
+        log.debug(f"Failed to find Linux game path: {e}")
+        return None
+
+
 def auto_switch_language_in_game(hwnd: int) -> int:
     """通过句柄获取程序路径以实现识别游戏当前语言
     \n(不过如果在运行时改动了游戏设置就没办法了)
@@ -38,17 +63,22 @@ def auto_switch_language_in_game(hwnd: int) -> int:
     output_lang_dict = default_lang
     output_lang_dict.update(SUPPORTED_GAME_LANG_CODE)
     path = None
-    try:
-        # 获取窗口的进程ID
-        _, pid = win32process.GetWindowThreadProcessId(hwnd)
 
-        # 通过psutil获取进程信息
-        process = psutil.Process(pid)
+    if sys.platform == "win32":
+        try:
+            # 获取窗口的进程ID
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
 
-        # 返回进程的可执行文件路径
-        path = Path(process.exe())
-    except Exception as e:
-        log.error(f"获取路径时出错: {e}")
+            # 通过psutil获取进程信息
+            process = psutil.Process(pid)
+
+            # 返回进程的可执行文件路径
+            path = Path(process.exe())
+        except Exception as e:
+            log.error(f"获取路径时出错: {e}")
+    else:
+        # On Linux, try to find the game path directly
+        path = _get_linux_game_path()
 
     if path is None:
         raise ValueError("未获取到程序路径")
@@ -113,6 +143,10 @@ def get_game_config_from_registry() -> dict:
     Returns:
         dict: 游戏设置的字典, 如果读取失败则返回空字典
     """
+    if sys.platform != "win32":
+        # Linux doesn't have Windows registry
+        return {}
+
     root = winreg.HKEY_CURRENT_USER
     sub_key = r"Software\ProjectMoon\LimbusCompany"
     value_name = "LocalSave.LocalGameOptionData_h467498167"

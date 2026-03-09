@@ -1,8 +1,14 @@
+import sys
 from datetime import datetime, timedelta
 from time import sleep
 
-import win32con
-import win32gui
+if sys.platform == "win32":
+    import win32con
+    import win32gui
+else:
+    win32con = None
+    win32gui = None
+
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
@@ -84,16 +90,36 @@ class ProductionWork(QThread):
         try:
             from module.game_and_screen import screen
 
-            hwnd = screen.handle.hwnd
-            win32gui.SetWindowPos(
-                hwnd,  # 目标窗口句柄
-                win32con.HWND_NOTOPMOST,  # 关键参数：取消置顶
-                0,
-                0,
-                0,
-                0,  # 忽略位置和大小（保持原样）
-                win32con.SWP_NOMOVE | win32con.SWP_NOSIZE,  # 标志位：不移动、不调整大小
-            )
+            if sys.platform == "win32":
+                hwnd = screen.handle.hwnd
+                win32gui.SetWindowPos(
+                    hwnd,  # 目标窗口句柄
+                    win32con.HWND_NOTOPMOST,  # 关键参数：取消置顶
+                    0,
+                    0,
+                    0,
+                    0,  # 忽略位置和大小（保持原样）
+                    win32con.SWP_NOMOVE | win32con.SWP_NOSIZE,  # 标志位：不移动、不调整大小
+                )
+            else:
+                # Linux: Use EWMH to remove always-on-top
+                try:
+                    from Xlib import display
+                    from ewmh import EWMH
+
+                    disp = display.Display()
+                    root = disp.screen().root
+                    ewmh = EWMH(disp, root)
+
+                    window = disp.create_resource_object("window", screen.handle.hwnd)
+                    # Remove _NET_WM_STATE_ABOVE to disable always-on-top
+                    ewmh.setWmState(window, 0, "_NET_WM_STATE_ABOVE")  # 0 = remove
+                    disp.sync()
+                except ImportError:
+                    log.warning("EWMH not available, cannot unset always-on-top")
+                except Exception as e:
+                    log.error(f"Failed to unset always-on-top on Linux: {e}")
+
         except Exception as e:
             self.error_occurred.emit(f"窗口设置错误: {str(e)}")
 

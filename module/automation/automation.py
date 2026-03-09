@@ -1,6 +1,7 @@
 import gc
 import math
 import random
+import sys
 import time
 from ast import List
 
@@ -67,10 +68,26 @@ class Automation(metaclass=SingletonMeta):
 
                 log.debug("使用基于窗口移动的后台点击模块")
                 self.input_handler = WindowMoveInput()
-        if self.input_handler is None:
-            from .input_handlers.input import BackgroundInput
+            elif input_type == "linux_foreground":
+                from .input_handlers.input import LinuxInput
 
-            self.input_handler = BackgroundInput()
+                log.debug("使用Linux前台点击模块(xdotool)")
+                self.input_handler = LinuxInput()
+            elif input_type == "linux_background":
+                from .input_handlers.input import LinuxBackgroundInput
+
+                log.debug("使用Linux后台点击模块(X11)")
+                self.input_handler = LinuxBackgroundInput()
+        if self.input_handler is None:
+            # Platform-specific default
+            if sys.platform == "win32":
+                from .input_handlers.input import BackgroundInput
+                log.debug("使用默认后台点击模块(Windows)")
+                self.input_handler = BackgroundInput()
+            else:
+                from .input_handlers.input import LinuxBackgroundInput
+                log.debug("使用默认后台点击模块(Linux)")
+                self.input_handler = LinuxBackgroundInput()
         assert isinstance(self.input_handler, AbstractInput), "输入处理器必须是AbstractInput的实例"
         self.mouse_click = self.input_handler.mouse_click
         self.mouse_click_blank = self.input_handler.mouse_click_blank
@@ -259,14 +276,27 @@ class Automation(metaclass=SingletonMeta):
             if time.time() - start_time > 60:
                 log.error("截图超时，尝试重启游戏")
                 import os
-
-                import win32process
+                import sys
 
                 from module.game_and_screen import screen
 
                 try:
-                    _, pid = win32process.GetWindowThreadProcessId(screen.handle.hwnd)
-                    os.system(f"taskkill /F /PID {pid}")
+                    # Cross-platform process termination
+                    if sys.platform == "win32":
+                        import win32process
+                        _, pid = win32process.GetWindowThreadProcessId(screen.handle.hwnd)
+                        os.system(f"taskkill /F /PID {pid}")
+                    else:
+                        # Linux: Use psutil to find and kill the process
+                        for proc in psutil.process_iter(["pid", "name"]):
+                            try:
+                                if "limbus" in proc.info["name"].lower():
+                                    p = psutil.Process(proc.info["pid"])
+                                    p.terminate()
+                                    p.wait(timeout=5)
+                                    break
+                            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                                continue
                 except:
                     pass
                 from tasks.base.script_task_scheme import init_game

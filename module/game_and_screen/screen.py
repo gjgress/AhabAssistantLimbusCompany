@@ -157,6 +157,15 @@ class Handle:
                 "Flags": 0,
                 "Device": "Unknown",
             }
+        if sys.platform != "win32":
+            # On Linux, return default monitor info
+            log.debug("monitor_info not implemented for Linux")
+            return {
+                "Monitor": (0, 0, 1920, 1080),
+                "Work": (0, 0, 1920, 1080),
+                "Flags": 0,
+                "Device": "Unknown",
+            }
         monitor_info = win32api.GetMonitorInfo(win32api.MonitorFromWindow(self.hwnd, win32con.MONITOR_DEFAULTTONEAREST))
         return monitor_info
 
@@ -181,11 +190,17 @@ class Handle:
         """将窗口设为前台窗口"""
         if self.hwnd == 0:
             return
+        if sys.platform != "win32":
+            log.debug("setForeground not implemented for Linux")
+            return
         win32gui.SetForegroundWindow(self.hwnd)
 
     def setMaximized(self, value: bool = True) -> None:
         """最大化窗口"""
         if self.hwnd == 0:
+            return
+        if sys.platform != "win32":
+            log.debug("setMaximized not implemented for Linux")
             return
         if value:
             win32gui.ShowWindow(self.hwnd, win32con.SW_MAXIMIZE)
@@ -195,6 +210,9 @@ class Handle:
     def switchFullScreenMode(self) -> bool:
         """切换全屏模式 (发送Alt+Enter)"""
         if self.hwnd == 0:
+            return False
+        if sys.platform != "win32":
+            log.debug("switchFullScreenMode not implemented for Linux")
             return False
         hwnd = self.hwnd
 
@@ -210,6 +228,9 @@ class Handle:
     def restore(self) -> None:
         """恢复窗口"""
         if self.hwnd == 0:
+            return
+        if sys.platform != "win32":
+            log.debug("restore not implemented for Linux")
             return
         win32gui.ShowWindow(self.hwnd, win32con.SW_SHOWNOACTIVATE)
 
@@ -253,6 +274,9 @@ class Handle:
     def set_window_pos(self, x: int, y: int) -> None:
         """将窗口移动到屏幕坐标 (x, y)"""
         if self.hwnd == 0:
+            return
+        if sys.platform != "win32":
+            log.debug("set_window_pos not implemented for Linux")
             return
         x = int(x)
         y = int(y)
@@ -298,6 +322,9 @@ class Handle:
         """设置窗口是否透明, 同时设置鼠标穿透"""
         hwnd = self.hwnd
         if hwnd == 0:
+            return
+        if sys.platform != "win32":
+            log.debug("set_window_transparent not implemented for Linux")
             return
         if not cfg.background_click:
             transparent = False
@@ -377,6 +404,9 @@ class Screen(metaclass=SingletonMeta):
 
     def reduce_miscontact(self, pos_style: str) -> None:
         """通过调整窗口置顶减少误触"""
+        if sys.platform != "win32":
+            log.debug("reduce_miscontact not implemented for Linux")
+            return
         # 获取适用于win32gui与win32con的窗口句柄
         hwnd = self.handle.hwnd
 
@@ -419,6 +449,9 @@ class Screen(metaclass=SingletonMeta):
 
     def adjust_win_size(self, set_win_size: tuple[int, int] = (1920, 1080)) -> None:
         """调整窗口大小"""
+        if sys.platform != "win32":
+            log.debug("adjust_win_size not implemented for Linux")
+            return
         hwnd = self.handle.hwnd
         client_width, client_height = set_win_size
 
@@ -454,6 +487,9 @@ class Screen(metaclass=SingletonMeta):
 
     def adjust_win_position(self, set_win_position: str = "free") -> None:
         """调整窗口位置"""
+        if sys.platform != "win32":
+            log.debug("adjust_win_position not implemented for Linux")
+            return
         if set_win_position == "free":
             return
         hwnd = self.handle.hwnd
@@ -482,6 +518,9 @@ class Screen(metaclass=SingletonMeta):
 
     def check_win_size(self, set_win_size: int) -> None:
         """检查窗口大小是否合适，若不合适则切换全屏再切换回窗口模式"""
+        if sys.platform != "win32":
+            log.debug("check_win_size not implemented for Linux")
+            return
         try:
             screen_width, screen_height = self.handle.monitor_size(
                 not cfg.background_click  # 前台模式使用工作区大小
@@ -521,6 +560,9 @@ class Screen(metaclass=SingletonMeta):
 
     def reset_win(self) -> bool:
         """重置窗口"""
+        if sys.platform != "win32":
+            log.debug("reset_win not implemented for Linux")
+            return False
         try:
             hwnd = self.handle.hwnd
             # 获取窗口的当前样式

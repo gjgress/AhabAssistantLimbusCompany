@@ -35,6 +35,8 @@ class ScheduleHelper:
         :param m: 分
         :type m: int
         """
+        if sys.platform != "win32":
+            raise NotImplementedError("Scheduled tasks are only supported on Windows")
         if (h not in range(24)) or (m not in range(60)):
             raise ValueError("无效参数")
         self._impl.register_daily_task(task_name, cmd_line, h, m)
@@ -48,6 +50,8 @@ class ScheduleHelper:
         :param cmd_line: 命令行
         :type cmd_line: str
         """
+        if sys.platform != "win32":
+            raise NotImplementedError("Scheduled tasks are only supported on Windows")
         self._impl.register_onstart_task(task_name, cmd_line)
 
     def unregister_task(self, task_name: str):
@@ -57,6 +61,8 @@ class ScheduleHelper:
         :param task_name: 任务名称
         :type task_name: str
         """
+        if sys.platform != "win32":
+            raise NotImplementedError("Scheduled tasks are only supported on Windows")
         self._impl.unregister_task(task_name)
         log.info("移除每日任务成功")
 
@@ -67,14 +73,31 @@ class ScheduleHelper_Win32:
     """
 
     def __init__(self):
-        import win32com.client
+        self._scheduler = None
+        self._root = None
 
-        self.scheduler = win32com.client.Dispatch("Schedule.Service")
-        self.scheduler.Connect()
-        self.root = self.scheduler.GetFolder("\\")
+    def _get_scheduler(self):
+        """Lazy initialization of Windows Task Scheduler."""
+        if self._scheduler is None:
+            try:
+                import win32com.client
+                self._scheduler = win32com.client.Dispatch("Schedule.Service")
+                self._scheduler.Connect()
+                self._root = self._scheduler.GetFolder("\\")
+            except ImportError:
+                raise RuntimeError("win32com.client is not available on this platform")
+        return self._scheduler
+
+    def _get_root(self):
+        """Get the root folder of the Task Scheduler."""
+        if self._root is None:
+            self._get_scheduler()
+        return self._root
 
     def register_daily_task(self, task_name: str, cmd_line: str, h: int, m: int):
-        task_def = self.scheduler.NewTask(0)
+        scheduler = self._get_scheduler()
+        root = self._get_root()
+        task_def = scheduler.NewTask(0)
         task_def.RegistrationInfo.Description = "AALC Daily Task"
         task_def.RegistrationInfo.Author = getpass.getuser()
 
@@ -98,7 +121,7 @@ class ScheduleHelper_Win32:
         task_def.Settings.StopIfGoingOnBatteries = False
 
         try:
-            self.root.RegisterTaskDefinition(task_name, task_def, 6, None, None, 3)
+            root.RegisterTaskDefinition(task_name, task_def, 6, None, None, 3)
             log.info(
                 f"创建每日任务成功，执行时间为每日{h if len(str(h)) > 1 else '0' + str(h)}:{m if len(str(m)) > 1 else '0' + str(m)}"
             )
@@ -107,7 +130,9 @@ class ScheduleHelper_Win32:
             raise e
 
     def register_onstart_task(self, task_name: str, cmd_line: str):
-        task_def = self.scheduler.NewTask(0)
+        scheduler = self._get_scheduler()
+        root = self._get_root()
+        task_def = scheduler.NewTask(0)
         task_def.RegistrationInfo.Description = "AALC OnStart Task"
         task_def.RegistrationInfo.Author = getpass.getuser()
 
@@ -129,28 +154,40 @@ class ScheduleHelper_Win32:
         task_def.Settings.StopIfGoingOnBatteries = False
 
         try:
-            self.root.RegisterTaskDefinition(task_name, task_def, 6, None, None, 3)
+            root.RegisterTaskDefinition(task_name, task_def, 6, None, None, 3)
         except Exception as e:
             log.error(f"创建任务 {task_name} 失败")
             raise e
 
     def unregister_task(self, task_name: str):
-        def unregister_onstart_task_registry(self, task_name):
-            """
-            删除自启动项
-            """
-            import winreg
+        root = self._get_root()
+        try:
+            root.DeleteTask(task_name, 0)
+            log.debug(f"已移除任务: {task_name}")
+        except Exception as e:
+            log.debug(f"移除任务失败: {e}")
+            # Also try to remove from startup registry
+            self._unregister_onstart_task_registry(task_name)
 
-            key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-            try:
-                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
-                winreg.DeleteValue(key, task_name)
-                winreg.CloseKey(key)
-                log.debug(f"已移除启动项: {task_name}")
-            except FileNotFoundError:
-                pass  # 已经不存在了
-            except Exception as e:
-                log.debug(f"通过移除注册表移除启动项失败: {e}")
+    def _unregister_onstart_task_registry(self, task_name: str):
+        """
+        删除自启动项
+        """
+        if sys.platform != "win32":
+            return
+
+        import winreg
+
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
+            winreg.DeleteValue(key, task_name)
+            winreg.CloseKey(key)
+            log.debug(f"已移除启动项: {task_name}")
+        except FileNotFoundError:
+            pass  # 已经不存在了
+        except Exception as e:
+            log.debug(f"通过移除注册表移除启动项失败: {e}")
 
         try:
             if task_name == "AALC Autostart":

@@ -1,11 +1,19 @@
+import sys
 import time
-from ctypes import windll
+
+if sys.platform == "win32":
+    from ctypes import windll
+    import pywintypes
+    import win32gui
+    import win32ui
+else:
+    windll = None
+    pywintypes = None
+    win32gui = None
+    win32ui = None
 
 import cv2
 import pyautogui
-import pywintypes
-import win32gui
-import win32ui
 from PIL import Image
 
 from module.config import cfg
@@ -174,6 +182,27 @@ class ScreenShot:
 
     @staticmethod
     def background_screenshot(gray: bool = True) -> Image.Image:
+        # Linux: Use platform services for background screenshot
+        if sys.platform != "win32":
+            try:
+                from module.platform import get_platform_services
+                services = get_platform_services()
+                result = services.capture.capture_window(screen.handle.hwnd)
+                if result.success:
+                    import cv2
+                    from PIL import Image
+                    # Convert numpy array (BGR) to PIL Image
+                    img = cv2.cvtColor(result.data, cv2.COLOR_BGR2RGB)
+                    pil_image = Image.fromarray(img)
+                    if gray:
+                        pil_image = pil_image.convert("L")
+                    return pil_image
+                else:
+                    raise RuntimeError(f"Screenshot failed: {result.error}")
+            except Exception as e:
+                log.error(f"Linux background screenshot failed: {e}")
+                raise
+
         # 定义所有需要清理的句柄/对象，以便在任何地方发生异常时可以清理
         hwnd_dc = None
         mfc_dc = None

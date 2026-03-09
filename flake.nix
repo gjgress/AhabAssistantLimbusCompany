@@ -224,6 +224,8 @@
             nativeBuildInputs = [ pkgs.uv ];
             buildInputs = [
               virtualenv-dev
+              pkgs.uv
+              pkgs.xdotool
             ];
 
             env = {
@@ -240,7 +242,7 @@
 
           packages.default =
             let
-              inherit (pkgs) stdenvNoCC makeWrapper;
+              inherit (pkgs) stdenvNoCC makeWrapper xdotool;
             in
             stdenvNoCC.mkDerivation {
               pname = "aalc";
@@ -249,12 +251,14 @@
               dontUnpack = true;
 
               nativeBuildInputs = [ makeWrapper ];
+              buildInputs = [ xdotool ];
 
               installPhase = ''
                 runHook preInstall
 
                 mkdir -p $out/bin
                 makeWrapper ${virtualenv}/bin/aalc $out/bin/aalc \
+                  --prefix PATH : ${lib.makeBinPath [ xdotool ]} \
                   --run 'export CONFIG_PATH="''${CONFIG_PATH:-$HOME/.config/aalc/config.yaml}"'
 
                 runHook postInstall

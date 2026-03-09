@@ -47,7 +47,12 @@ except ImportError:
     from module.logger import log
 
 import sys
-import winreg
+
+if sys.platform == "win32":
+    import winreg
+else:
+    winreg = None
+
 from enum import Enum
 from pathlib import Path
 from typing import Callable
@@ -74,6 +79,9 @@ class TemplateToast(Enum):
 
 def _register_hkey(appId: str = APPID, appName: str = APPNAME, iconPath: Path | None = None):
     """实际注册行为"""
+    if sys.platform != "win32":
+        raise NotImplementedError("Windows toast notifications are only available on Windows")
+
     winreg.ConnectRegistry(None, winreg.HKEY_CURRENT_USER)
     keyPath = f"SOFTWARE\\Classes\\AppUserModelId\\{appId}"
     with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, keyPath) as masterKey:
@@ -84,6 +92,10 @@ def _register_hkey(appId: str = APPID, appName: str = APPNAME, iconPath: Path | 
 
 def _register_toast(key_name: str = APPID, app_name: str = APPNAME, icon_path: str = ICONPATH) -> bool:
     """注册通知"""
+    if sys.platform != "win32":
+        log.debug("Windows toast notifications are not available on this platform")
+        return False
+
     try:
         relative_path = icon_path
 
@@ -100,11 +112,17 @@ def _register_toast(key_name: str = APPID, app_name: str = APPNAME, icon_path: s
 
 def unregister_toast(appId: str = APPID):
     """注销注册的通知"""
+    if sys.platform != "win32":
+        log.debug("Windows toast notifications are not available on this platform")
+        return
     _unregister_toast(appId)
 
 
 def _unregister_toast(appId: str):
     """实际注销行为"""
+    if sys.platform != "win32":
+        raise NotImplementedError("Windows toast notifications are only available on Windows")
+
     keyPath = "SOFTWARE\\Classes\\AppUserModelId\\"
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, keyPath) as uperKey:

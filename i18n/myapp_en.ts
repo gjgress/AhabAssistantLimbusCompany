@@ -879,6 +879,14 @@ Right-click to set as permanent</translation>
         <translation>Background Mode Enhancement(pywin32+set win pos)</translation>
     </message>
     <message>
+        <source>前台模式 [Linux] (xdotool)</source>
+        <translation>Foreground mode [Linux] (xdotool)</translation>
+    </message>
+    <message>
+        <source>后台模式 [Linux] (X11/XWayland)</source>
+        <translation>Background mode [Linux] (X11/XWayland)</translation>
+    </message>
+    <message>
         <source>操控方式</source>
         <translation>Control method</translation>
     </message>
@@ -893,6 +901,14 @@ Right-click to set as permanent</translation>
     <message>
         <source>基于移动窗口的后台模式，有效规避了后台模式需要移动鼠标的情况，&lt;br/&gt;但是性能和稳定性较差，&lt;font color=red&gt;不推荐长时间无人使用&lt;/font&gt;</source>
         <translation>Window-move BG mode. Avoids mouse syncing move.&lt;br/&gt; But has poor stability.&lt;font color=red&gt; Don&apos;t leave it unattended.&lt;/font&gt;</translation>
+    </message>
+    <message>
+        <source>[Linux] 前台模式 (xdotool)，游戏必须在显示在最上方，&lt;br/&gt;Proton游戏在XWayland下运行</source>
+        <translation>[Linux] Foreground mode (xdotool). Game must be displayed on top. &lt;br/&gt;Proton games run under XWayland.</translation>
+    </message>
+    <message>
+        <source>[Linux] 后台模式 (X11/XWayland)，游戏可以在后台运行，&lt;br/&gt;但是&lt;font color=red&gt;游戏不能处于最小化状态!!&lt;/font&gt;</source>
+        <translation>[Linux] Background mode (X11/XWayland). Game can run in background, &lt;br/&gt;but &lt;font color=red&gt;cannot be minimized!!&lt;/font&gt;</translation>
     </message>
     <message>
         <source>未知的输入模式，发生了错误</source>

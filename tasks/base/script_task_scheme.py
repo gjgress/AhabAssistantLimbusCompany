@@ -1,12 +1,17 @@
 import os
 import platform
 import random
+import sys
 from datetime import datetime
 from sys import exc_info
 from time import sleep, time
 from traceback import format_exception
 
-import win32process
+if sys.platform == "win32":
+    import win32process
+else:
+    win32process = None
+
 from playsound3 import playsound
 from PySide6.QtCore import QT_TRANSLATE_NOOP, QMutex, QThread
 
@@ -367,30 +372,58 @@ def script_task() -> None | int:
     if cfg.resonate_with_Ahab:
         Resonate_with_Ahab()
 
-    if platform.system() == "Windows":
-        after_completion = cfg.after_completion
-        try:
-            if after_completion == 1:
+    after_completion = cfg.after_completion
+    try:
+        if after_completion == 1:
+            log.info("脚本完成后将睡眠")
+            if sys.platform == "win32":
                 os.system("rundll32.exe powrprof.dll,SetSuspendState Sleep")
-            elif after_completion == 2:
+            else:
+                os.system("systemctl suspend")
+        elif after_completion == 2:
+            log.info("脚本完成后将休眠")
+            if sys.platform == "win32":
                 os.system("rundll32.exe powrprof.dll,SetSuspendState Hibernate")
-            elif after_completion == 3:
+            else:
+                os.system("systemctl hibernate")
+        elif after_completion == 3:
+            log.info("脚本完成后将关机")
+            if sys.platform == "win32":
                 os.system("shutdown /s /t 30")
-            elif after_completion == 4 or after_completion == 6:
+            else:
+                os.system("shutdown -h now")
+        elif after_completion == 4 or after_completion == 6:
+            log.info("脚本完成后将关闭游戏")
+            # Cross-platform process termination
+            if sys.platform == "win32":
                 _, pid = win32process.GetWindowThreadProcessId(screen.handle.hwnd)
                 ret = os.system(f"taskkill /F /PID {pid}")
-                if ret == 0:
-                    log.info("成功关闭 Limbus Company")
-                elif ret == 128:
-                    log.error("错误：进程不存在")
-                elif ret == 1:
-                    log.error("错误：权限不足")
-        except Exception as e:
-            log.error(f"脚本结束后的操作失败: {e}")
+            else:
+                # Linux: Use psutil
+                import psutil
+                ret = -1
+                for proc in psutil.process_iter(["pid", "name"]):
+                    try:
+                        if "limbus" in proc.info["name"].lower():
+                            p = psutil.Process(proc.info["pid"])
+                            p.terminate()
+                            p.wait(timeout=5)
+                            ret = 0
+                            break
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                        continue
 
-        finally:
-            if after_completion == 5 or after_completion == 6:
-                return 0  # 正常退出信号
+            if ret == 0:
+                log.info("成功关闭 Limbus Company")
+            elif ret == 128:
+                log.error("错误：进程不存在")
+            elif ret == 1:
+                log.error("错误：权限不足")
+        elif after_completion == 5 or after_completion == 6:
+            log.info("脚本完成后将关闭AALC")
+            return 0  # 正常退出信号
+    except Exception as e:
+        log.error(f"脚本结束后的操作失败: {e}")
 
 
 class my_script_task(QThread):

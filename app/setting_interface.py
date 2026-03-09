@@ -561,6 +561,7 @@ class SettingInterface(ScrollArea):
             )
 
     def __onWinInputTypeChanged(self):
+        import sys
         input_type = cfg.get_value("win_input_type")
         if input_type == "background":
             content = QT_TRANSLATE_NOOP(
@@ -575,6 +576,18 @@ class SettingInterface(ScrollArea):
             content = QT_TRANSLATE_NOOP(
                 "ComboBoxSettingCard",
                 "基于移动窗口的后台模式，有效规避了后台模式需要移动鼠标的情况，<br/>但是性能和稳定性较差，<font color=red>不推荐长时间无人使用</font>",
+            )
+            cfg.set_value("background_click", True)
+        elif input_type == "linux_foreground":
+            content = QT_TRANSLATE_NOOP(
+                "ComboBoxSettingCard",
+                "[Linux] 前台模式 (xdotool)，游戏必须在显示在最上方，<br/>Proton游戏在XWayland下运行",
+            )
+            cfg.set_value("background_click", False)
+        elif input_type == "linux_background":
+            content = QT_TRANSLATE_NOOP(
+                "ComboBoxSettingCard",
+                "[Linux] 后台模式 (X11/XWayland)，游戏可以在后台运行，<br/>但是<font color=red>游戏不能处于最小化状态!!</font>",
             )
             cfg.set_value("background_click", True)
         else:
