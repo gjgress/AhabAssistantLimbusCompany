@@ -229,7 +229,7 @@ class Handle:
         """恢复窗口"""
         if self.hwnd == 0:
             return
-        if sys.platform != "win32":
+        if sys.platform == "linux":
             log.debug("restore not implemented for Linux")
             return
         win32gui.ShowWindow(self.hwnd, win32con.SW_SHOWNOACTIVATE)
@@ -487,7 +487,7 @@ class Screen(metaclass=SingletonMeta):
 
     def adjust_win_position(self, set_win_position: str = "free") -> None:
         """调整窗口位置"""
-        if sys.platform != "win32":
+        if sys.platform == "linux":
             log.debug("adjust_win_position not implemented for Linux")
             return
         if set_win_position == "free":
@@ -518,7 +518,7 @@ class Screen(metaclass=SingletonMeta):
 
     def check_win_size(self, set_win_size: int) -> None:
         """检查窗口大小是否合适，若不合适则切换全屏再切换回窗口模式"""
-        if sys.platform != "win32":
+        if sys.platform == "linux":
             log.debug("check_win_size not implemented for Linux")
             return
         try:
@@ -560,7 +560,7 @@ class Screen(metaclass=SingletonMeta):
 
     def reset_win(self) -> bool:
         """重置窗口"""
-        if sys.platform != "win32":
+        if sys.platform == "linux":
             log.debug("reset_win not implemented for Linux")
             return False
         try:

@@ -1,4 +1,5 @@
 import os
+import sys
 import webbrowser
 
 import psutil
@@ -33,15 +34,17 @@ class Game(metaclass=SingletonMeta):
             self.game_path_exists = False
 
         try:
-            if self.game_path_exists:
+            if sys.platform == "win32" and self.game_path_exists:
                 os.startfile(self.game_path)
                 self.log.info(f"游戏启动：{self.game_path}")
                 return True
-            else:
+            elif sys.platform == "linux":
                 # 调用系统打开该 URL（会触发 Steam 启动游戏）
                 webbrowser.open(self.game_url)
                 self.log.info("游戏使用steam命令启动")
                 return True
+            else:
+                raise NotImplementedError("仅支持在Windows或Linux平台启动游戏")
         except Exception as e:
             self.log.error(f"启动游戏时发生错误：{e}")
         return False

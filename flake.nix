@@ -212,7 +212,7 @@
               });
 
           pythonSet = pythonSet'.pythonPkgsHostHost.overrideScope pyprojectOverrides;
-          virtualenv = (pythonSet.mkVirtualEnv "example-venv" (workspace.deps.default // {
+          virtualenv = (pythonSet.mkVirtualEnv "aalc-env" (workspace.deps.default // {
             tkinter = [ ]; # Must include _tkinter for Python GUI
           })).overrideAttrs (old: {
             venvIgnoreCollisions = [ "*" ];
